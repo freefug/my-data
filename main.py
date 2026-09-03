@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 
@@ -18,13 +17,11 @@ DATA_URL = "https://raw.githubusercontent.com/greatsong/modudata/main/data/seoul
 def load_data():
     df = pd.read_csv(DATA_URL, encoding="utf-8-sig")
 
-    # 날짜를 날짜 형식으로 변환
+    # 날짜와 평균기온을 숫자/날짜 형식으로 변환
     df["날짜"] = pd.to_datetime(df["날짜"], errors="coerce")
-
-    # 평균기온을 숫자로 변환
     df["평균기온"] = pd.to_numeric(df["평균기온"], errors="coerce")
 
-    # 날짜 또는 평균기온이 없는 행 제거
+    # 필요한 데이터가 없는 행 제거
     df = df.dropna(subset=["날짜", "평균기온"])
 
     # 연도 추출
@@ -37,90 +34,96 @@ def load_data():
 df = load_data()
 
 # 연도별 평균기온 계산
-yearly = (
+annual_temp = (
     df.groupby("연도")["평균기온"]
     .mean()
     .reset_index()
-    .rename(columns={"평균기온": "연평균기온"})
 )
 
-# 관측일수가 충분한 연도만 사용
-days_per_year = (
-    df.groupby("연도")["날짜"]
-    .nunique()
-    .reset_index(name="관측일수")
-)
+annual_temp.columns = ["연도", "연평균기온"]
 
-yearly = yearly.merge(days_per_year, on="연도")
+# 연도순으로 정렬
+annual_temp = annual_temp.sort_values("연도")
 
-# 1년의 대부분이 관측된 연도만 사용
-yearly = yearly[yearly["관측일수"] >= 300].copy()
-
-# 최신 100년 선택
-yearly = yearly.sort_values("연도")
-yearly_100 = yearly.tail(100).copy()
+# 최근 100년 데이터 선택
+annual_temp = annual_temp.tail(100)
 
 
-# 제목
+# -------------------------
+# 화면
+# -------------------------
+
 st.title("🌡️ 서울의 100년간 연평균 기온 변화")
+
 st.write(
-    "서울의 일별 평균기온 데이터를 이용하여 연도별 평균기온을 계산하고, "
-    "최근 100년 동안의 변화를 나타낸 그래프입니다."
+    "서울의 일별 평균기온 데이터를 연도별로 평균하여 "
+    "100년 동안 연평균 기온이 어떻게 변해 왔는지 나타낸 그래프입니다."
 )
 
-# 기간 표시
-start_year = int(yearly_100["연도"].min())
-end_year = int(yearly_100["연도"].max())
+# 분석 기간
+start_year = int(annual_temp["연도"].min())
+end_year = int(annual_temp["연도"].max())
 
 st.info(f"📅 분석 기간: {start_year}년 ~ {end_year}년")
 
 
-# 그래프용 데이터
-chart_data = yearly_100.set_index("연도")[["연평균기온"]]
+# 그래프
+st.subheader("📈 연도별 연평균 기온")
 
-# 선그래프
-st.subheader("📈 연도별 평균기온")
+chart_data = annual_temp.set_index("연도")
 
 st.line_chart(
     chart_data,
     y="연평균기온",
     x_label="연도",
-    y_label="연평균 기온(℃)",
+    y_label="연평균 기온 (℃)",
     use_container_width=True
 )
 
 
-# 간단한 통계
+# 통계
 col1, col2, col3 = st.columns(3)
 
 with col1:
+    min_temp = annual_temp["연평균기온"].min()
+    min_year = annual_temp.loc[
+        annual_temp["연평균기온"].idxmin(), "연도"
+    ]
+
     st.metric(
         "가장 낮은 연평균 기온",
-        f"{yearly_100['연평균기온'].min():.1f} ℃"
+        f"{min_temp:.1f} ℃",
+        f"{int(min_year)}년"
     )
 
 with col2:
+    max_temp = annual_temp["연평균기온"].max()
+    max_year = annual_temp.loc[
+        annual_temp["연평균기온"].idxmax(), "연도"
+    ]
+
     st.metric(
         "가장 높은 연평균 기온",
-        f"{yearly_100['연평균기온'].max():.1f} ℃"
+        f"{max_temp:.1f} ℃",
+        f"{int(max_year)}년"
     )
 
 with col3:
     change = (
-        yearly_100.iloc[-1]["연평균기온"]
-        - yearly_100.iloc[0]["연평균기온"]
+        annual_temp.iloc[-1]["연평균기온"]
+        - annual_temp.iloc[0]["연평균기온"]
     )
 
     st.metric(
-        "100년간 변화",
+        "처음과 마지막 연도의 차이",
         f"{change:+.1f} ℃"
     )
 
 
-# 데이터 표
-with st.expander("📋 연도별 기온 데이터 보기"):
-    display_data = yearly_100[["연도", "연평균기온", "관측일수"]].copy()
-    display_data["연평균기온"] = display_data["연평균기온"].round(1)
+# 연도별 데이터 확인
+with st.expander("📋 연도별 연평균 기온 데이터 보기"):
+    display_data = annual_temp.copy()
+    display_data["연평균기온"] = display_data["연평균기온"].round(2)
 
     st.dataframe(
         display_data,
@@ -128,6 +131,5 @@ with st.expander("📋 연도별 기온 데이터 보기"):
         hide_index=True
     )
 
-st.caption(
-    "데이터 출처: GitHub greatsong/modudata의 seoul.csv"
-)
+
+st.caption("데이터 출처: seoul.csv (greatsong/modudata)")
